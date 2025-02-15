@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>موقع المهام اليومية</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            direction: rtl;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #5c6bc0;
+        }
+        .task-form {
+            margin-bottom: 20px;
+        }
+        .task-form input, .task-form textarea, .task-form button {
+            padding: 10px;
+            margin: 5px 0;
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .task-form textarea {
+            resize: vertical;
+            height: 80px;
+        }
+        .task-form button {
+            background-color: #5c6bc0;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .task-form button:hover {
+            background-color: #3949ab;
+        }
+        .task-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        .task-list li {
+            padding: 10px;
+            border: 1px solid #ddd;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            transition: background-color 0.3s ease;
+        }
+        .task-list li.completed {
+            text-decoration: line-through;
+            color: #888;
+            background-color: #e0e0e0;
+        }
+        .task-list li button {
+            background-color: #ff5252;
+            color: #fff;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            margin-left: 5px;
+        }
+        .task-list li button.edit {
+            background-color: #ffa726;
+        }
+        .task-list li button:hover {
+            background-color: #ff1744;
+        }
+        .task-list li button.edit:hover {
+            background-color: #fb8c00;
+        }
+        .filter-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .filter-buttons button {
+            background-color: #5c6bc0;
+            color: #fff;
+            border: none;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            flex: 1;
+            margin: 0 5px;
+        }
+        .filter-buttons button:hover {
+            background-color: #3949ab;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            width: 300px;
+            text-align: center;
+        }
+        .modal-content button {
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>المهام اليومية</h1>
+        <div class="task-form">
+            <input type="text" id="taskInput" placeholder="أدخل المهمة">
+            <textarea id="taskDescription" placeholder="أدخل وصف المهمة"></textarea>
+            <input type="datetime-local" id="taskTime">
+            <button onclick="addTask()">إضافة مهمة</button>
+        </div>
+        <div class="filter-buttons">
+            <button onclick="filterTasks('all')">عرض الكل</button>
+            <button onclick="filterTasks('completed')">المكتملة</button>
+            <button onclick="filterTasks('incomplete')">غير المكتملة</button>
+        </div>
+        <ul class="task-list" id="taskList"></ul>
+    </div>
+
+    <!-- Modal لتأكيد الحذف -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content">
+            <p>هل أنت متأكد من حذف هذه المهمة؟</p>
+            <button onclick="confirmDelete()">نعم</button>
+            <button onclick="closeModal()">لا</button>
+        </div>
+    </div>
+
+    <!-- Modal لتعديل المهمة -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <input type="text" id="editTaskInput" placeholder="أدخل المهمة">
+            <textarea id="editTaskDescription" placeholder="أدخل وصف المهمة"></textarea>
+            <input type="datetime-local" id="editTaskTime">
+            <button onclick="saveEdit()">حفظ</button>
+            <button onclick="closeModal()">إلغاء</button>
+        </div>
+    </div>
+
+    <script>
+        let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+        let currentDeleteIndex = null;
+        let currentEditIndex = null;
+
+        // تحميل المهام عند تحميل الصفحة
+        document.addEventListener('DOMContentLoaded', loadTasks);
+
+        function loadTasks() {
+            const taskList = document.getElementById('taskList');
+            taskList.innerHTML = '';
+            tasks.forEach((task, index) => {
+                addTaskToDOM(task, index);
+                checkTaskTime(task, index);
+            });
+        }
+
+        function addTask() {
+            const taskInput = document.getElementById('taskInput');
+            const taskDescription = document.getElementById('taskDescription');
+            const taskTime = document.getElementById('taskTime');
+            const taskText = taskInput.value.trim();
+            const taskDesc = taskDescription.value.trim();
+            const taskDateTime = taskTime.value;
+
+            if (taskText === '' || taskDateTime === '') {
+                alert('الرجاء إدخال المهمة والوقت المحدد');
+                return;
+            }
+
+            const task = {
+                text: taskText,
+                description: taskDesc,
+                time: taskDateTime,
+                completed: false
+            };
+
+            tasks.push(task);
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+
+            addTaskToDOM(task, tasks.length - 1);
+            checkTaskTime(task, tasks.length - 1);
+
+            taskInput.value = '';
+            taskDescription.value = '';
+            taskTime.value = '';
+        }
+
+        function addTaskToDOM(task, index) {
+            const taskList = document.getElementById('taskList');
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <div>
+                    <strong>${task.text}</strong>
+                    <p>${task.description}</p>
+                    <small>${new Date(task.time).toLocaleString()}</small>
+                </div>
+                <div>
+                    <button class="edit" onclick="openEditModal(${index})">تعديل</button>
+                    <button onclick="openDeleteModal(${index})">حذف</button>
+                    <button onclick="completeTask(${index})">${task.completed ? 'إلغاء' : 'تم'}</button>
+                </div>
+            `;
+            if (task.completed) {
+                li.classList.add('completed');
+            }
+            taskList.appendChild(li);
+        }
+
+        function completeTask(index) {
+            tasks[index].completed = !tasks[index].completed;
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+            loadTasks();
+        }
+
+        function openDeleteModal(index) {
+            currentDeleteIndex = index;
+            document.getElementById('deleteModal').style.display = 'flex';
+        }
+
+        function confirmDelete() {
+            tasks.splice(currentDeleteIndex, 1);
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+            loadTasks();
+            closeModal();
+        }
+
+        function openEditModal(index) {
+            currentEditIndex = index;
+            const task = tasks[index];
+            document.getElementById('editTaskInput').value = task.text;
+            document.getElementById('editTaskDescription').value = task.description;
+            document.getElementById('editTaskTime').value = task.time;
+            document.getElementById('editModal').style.display = 'flex';
+        }
+
+        function saveEdit() {
+            const taskText = document.getElementById('editTaskInput').value.trim();
+            const taskDesc = document.getElementById('editTaskDescription').value.trim();
+            const taskDateTime = document.getElementById('editTaskTime').value;
+
+            if (taskText === '' || taskDateTime === '') {
+                alert('الرجاء إدخال المهمة والوقت المحدد');
+                return;
+            }
+
+            tasks[currentEditIndex] = {
+                text: taskText,
+                description: taskDesc,
+                time: taskDateTime,
+                completed: tasks[currentEditIndex].completed
+            };
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+            loadTasks();
+            closeModal();
+        }
+
+        function closeModal() {
+            document.getElementById('deleteModal').style.display = 'none';
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        function filterTasks(filter) {
+            const taskList = document.getElementById('taskList');
+            taskList.innerHTML = '';
+            tasks.forEach((task, index) => {
+                if (filter === 'all' || 
+                    (filter === 'completed' && task.completed) || 
+                    (filter === 'incomplete' && !task.completed)) {
+                    addTaskToDOM(task, index);
+                }
+            });
+        }
+
+        function checkTaskTime(task, index) {
+            const now = new Date();
+            const taskTime = new Date(task.time);
+
+            if (taskTime > now && !task.completed) {
+                const timeout = taskTime - now;
+                setTimeout(() => {
+                    if (Notification.permission === 'granted') {
+                        new Notification(`حان وقت المهمة: ${task.text}`);
+                        playSound();
+                    } else if (Notification.permission !== 'denied') {
+                        Notification.requestPermission().then(permission => {
+                            if (permission === 'granted') {
+                                new Notification(`حان وقت المهمة: ${task.text}`);
+                                playSound();
+                            }
+                        });
+                    }
+                }, timeout);
+            }
+        }
+
+        function playSound() {
+            const audio = new Audio('notification.mp3'); // تأكد من وجود ملف صوتي
+            audio.play();
+        }
+
+        // طلب إذن الإشعارات عند تحميل الصفحة
+        if (Notification.permission !== 'granted') {
+            Notification.requestPermission();
+        }
+    </script>
+</body>
+</html>
